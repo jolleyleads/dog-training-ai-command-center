@@ -1,0 +1,176 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <title>Dog Training AI Command Center</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<aside>
+    <h2>Dog Training AI</h2>
+    <a href="/">Dashboard</a>
+    <a href="/api/leads" target="_blank">Leads API</a>
+    <a href="/api/lead-source-template" target="_blank">Import Template</a>
+    <a href="/api/health" target="_blank">Health</a>
+    {% if not metrics.demo_mode %}
+    <a href="/logout">Logout</a>
+    {% endif %}
+</aside>
+
+<main>
+    <section class="hero">
+        <h1>Dog Training AI Lead Intelligence & Client Booking Command Center</h1>
+        <p>Capture dog owner leads, qualify training needs, score urgency, estimate revenue, draft outreach, and book consultations.</p>
+        {% if metrics.demo_mode %}
+        <div class="demo-banner">Demo mode active. Add ADMIN_USERNAME and ADMIN_PASSWORD in Render for login protection.</div>
+        {% endif %}
+    </section>
+
+    <section class="grid">
+        <div class="card"><h3>Total Leads</h3><p class="metric">{{ metrics.total_leads }}</p></div>
+        <div class="card"><h3>High Priority</h3><p class="metric">{{ metrics.high_priority }}</p></div>
+        <div class="card"><h3>Projected Revenue</h3><p class="metric">${{ "{:,.0f}".format(metrics.projected_revenue) }}</p></div>
+        <div class="card"><h3>Average Score</h3><p class="metric">{{ metrics.average_score }}</p></div>
+        <div class="card"><h3>Outreach Drafts</h3><p class="metric">{{ metrics.outreach_count }}</p></div>
+        <div class="card"><h3>Pipeline</h3><p>New: {{ metrics.new_count }} | Contacted: {{ metrics.contacted_count }} | Booked: {{ metrics.booked_count }}</p></div>
+    </section>
+
+    <section class="panel">
+        <h2>Add Dog Training Lead</h2>
+        <div class="form-grid">
+            <input id="owner_name" placeholder="Owner Name">
+            <input id="dog_name" placeholder="Dog Name">
+            <input id="dog_breed" placeholder="Dog Breed">
+            <input id="dog_age" placeholder="Dog Age">
+            <input id="service_interest" placeholder="Service Interest">
+            <input id="urgency" placeholder="Urgency">
+            <input id="phone" placeholder="Phone">
+            <input id="email" placeholder="Email">
+            <input id="city" placeholder="City">
+            <input id="state" placeholder="State">
+            <input id="source" placeholder="Source">
+            <input id="estimated_program_value" placeholder="Estimated Program Value">
+            <input id="probability_to_close" placeholder="Close Probability e.g. 0.35">
+        </div>
+
+        <textarea id="behavior_issue" placeholder="Dog behavior issue: aggression, puppy biting, leash pulling, separation anxiety..."></textarea>
+        <textarea id="notes" placeholder="Notes"></textarea>
+
+        <button onclick="addLead()">Save & Score Lead</button>
+        <div id="resultBox"></div>
+    </section>
+
+    <section class="panel">
+        <h2>Dog Training Lead Pipeline</h2>
+
+        {% for lead in leads %}
+        <div class="lead priority-{{ lead.priority|lower }}">
+            <div class="lead-head">
+                <div>
+                    <h3>{{ lead.owner_name }} — {{ lead.dog_name }}</h3>
+                    <p>{{ lead.dog_breed }} | {{ lead.dog_age }} | {{ lead.city }}, {{ lead.state }} | {{ lead.source }}</p>
+                </div>
+                <div class="score">{{ lead.score }}/100 <span>{{ lead.priority }}</span></div>
+            </div>
+
+            <p><b>Behavior Issue:</b> {{ lead.behavior_issue }}</p>
+            <p><b>Service Interest:</b> {{ lead.service_interest }}</p>
+            <p><b>Urgency:</b> {{ lead.urgency }}</p>
+            <p><b>AI Summary:</b> {{ lead.ai_summary }}</p>
+            <p><b>Recommended Program:</b> {{ lead.recommended_program }}</p>
+            <p><b>Next Best Action:</b> {{ lead.next_best_action }}</p>
+            <p><b>Projected Revenue:</b> ${{ "{:,.0f}".format(lead.projected_revenue or 0) }}</p>
+            <p><b>Status:</b> {{ lead.status }}</p>
+
+            <button onclick="draftOutreach('{{ lead.lead_id }}')">Draft Email/SMS</button>
+            <button onclick="gmailDraft('{{ lead.lead_id }}')">Generate Gmail Draft</button>
+            <button onclick="syncSheets('{{ lead.lead_id }}')">Sync to Sheets/Make</button>
+            <button onclick="regenSummary('{{ lead.lead_id }}')">Regenerate Summary</button>
+        </div>
+        {% endfor %}
+    </section>
+
+    <section class="panel">
+        <h2>Recent Outreach Drafts</h2>
+        {% for item in outreach %}
+        <div class="activity">
+            <b>{{ item.channel|upper }} · {{ item.status }}</b>
+            <p>{{ item.subject }}</p>
+            <pre>{{ item.message }}</pre>
+        </div>
+        {% endfor %}
+    </section>
+</main>
+
+<script>
+function val(id){ return document.getElementById(id).value; }
+
+function addLead(){
+    const payload = {
+        owner_name: val("owner_name"),
+        dog_name: val("dog_name"),
+        dog_breed: val("dog_breed"),
+        dog_age: val("dog_age"),
+        behavior_issue: val("behavior_issue"),
+        service_interest: val("service_interest"),
+        urgency: val("urgency"),
+        phone: val("phone"),
+        email: val("email"),
+        city: val("city"),
+        state: val("state"),
+        source: val("source"),
+        estimated_program_value: val("estimated_program_value"),
+        probability_to_close: val("probability_to_close") || 0.25,
+        notes: val("notes")
+    };
+
+    fetch("/api/add-lead", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(payload)
+    })
+    .then(r=>r.json())
+    .then(data=>{
+        document.getElementById("resultBox").innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+        setTimeout(()=>location.reload(), 1200);
+    });
+}
+
+function draftOutreach(id){
+    fetch(`/api/outreach/${id}`, {method:"POST"})
+    .then(r=>r.json())
+    .then(data=>{
+        alert("Outreach drafts created.");
+        location.reload();
+    });
+}
+
+function gmailDraft(id){
+    fetch(`/api/gmail-draft/${id}`, {method:"POST"})
+    .then(r=>r.json())
+    .then(data=>{
+        alert("Gmail-ready draft generated.");
+        console.log(data);
+        location.reload();
+    });
+}
+
+function syncSheets(id){
+    fetch(`/api/sheets-sync/${id}`, {method:"POST"})
+    .then(r=>r.json())
+    .then(data=>{
+        alert("Sheets/Make payload ready.");
+        console.log(data);
+    });
+}
+
+function regenSummary(id){
+    fetch(`/api/regenerate-summary/${id}`, {method:"POST"})
+    .then(r=>r.json())
+    .then(data=>{
+        alert("Summary updated.");
+        location.reload();
+    });
+}
+</script>
+</body>
+</html>
